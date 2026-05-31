@@ -1,68 +1,93 @@
 # PodeRemoteRunner
 
-**Run PowerShell commands on multiple remote servers in parallel.**
+**Run commands on multiple remote servers in parallel — Windows and Linux.**
 
-[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)](https://github.com/PowerShell/PowerShell)
-[![Pode](https://img.shields.io/badge/Pode-2.x-green?logo=powershell)](https://github.com/Badgerati/Pode)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
+[![Pode](https://img.shields.io/badge/Pode-2.x-brightgreen?logo=powershell&logoColor=white)](https://github.com/Badgerati/Pode)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows-blue?logo=windows)](https://www.microsoft.com/windows)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078d4?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
+
+[Quick Start](#quick-start) · [API](#api) · [Prerequisites](#prerequisites) · [Troubleshooting](#troubleshooting)
 
 </div>
 
-Execute commands on **Windows servers via WinRM** and **Linux servers via SSH** from a single HTTP interface. Includes a web UI and a REST API.
+---
+
+One command. Any number of servers. All at the same time.
+
+PodeRemoteRunner is a lightweight PowerShell HTTP server that executes commands on remote **Windows servers via WinRM** and **Linux servers via SSH** in parallel. It exposes a clean REST API and an optional web UI — no agents, no dependencies on the target machines.
+
+<br>
 
 ![Architecture](image.png)
+
+<br>
 
 ---
 
 ## Features
 
-- **Parallel execution** — all target servers run simultaneously, not one by one
-- **WinRM** — execute PowerShell on Windows servers over HTTPS (port 5986)
-- **SSH** — execute commands on Linux/Unix servers with key-based authentication
-- **Web UI + REST API** — use the browser or call the API directly from scripts
-- **Per-request TraceId** — every request gets a unique ID for log correlation
-- **Per-execution log files** — each run saves command and output to its own file
-- **Rate limiting** — 60 requests per minute per IP (Pode built-in)
-- **OWASP security headers** — CSP, X-Frame-Options, X-Content-Type-Options, and more
+**Execution**
+- Parallel execution across unlimited servers simultaneously
+- WinRM over HTTPS (port 5986) for Windows — uses your current Windows identity, no passwords
+- SSH key authentication for Linux/Unix — passwords never accepted or stored
+- Auto-retry with up to 2 attempts per server before marking it as failed
+
+**Observability**
+- Unique TraceId per request — returned in the `X-Request-Id` response header
+- Per-execution log file — command, output, and timing saved for every run
+- Daily-rotated request logs in plain text and structured JSON (JSONL)
+
+**Security**
+- OWASP security headers on every response (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+- Input validation — server names and hostnames sanitized before use
+- Rate limiting — 60 requests per minute per IP (Pode built-in)
 
 ---
 
 ## Quick Start
 
-**1. Install Pode:**
+**1. Install Pode**
 ```powershell
 Install-Module -Name Pode -Scope CurrentUser
 ```
 
-**2. Run setup** (checks requirements, creates the `logs/` folder):
+**2. Run setup** — checks requirements and creates the `logs/` folder
 ```powershell
 .\scripts\setup.ps1
 ```
 
-**3. Start the server:**
+**3. Start the server**
 ```powershell
+# Foreground (recommended for first run)
 .\server.ps1
+
+# Background
+.\start-background.ps1
 ```
 
-Open `http://localhost:8080` in your browser.
+**4. Open your browser**
+```
+http://localhost:8080
+```
 
 ---
 
 ## API
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+|:------:|----------|-------------|
 | `GET` | `/` | Server status page |
 | `GET` | `/health` | Health check |
 | `GET` | `/winrm` | WinRM web UI |
-| `POST` | `/winrm/run` | Execute PowerShell via WinRM |
+| `POST` | `/winrm/run` | Execute PowerShell on Windows servers |
 | `GET` | `/ssh` | SSH web UI |
-| `POST` | `/ssh/run` | Execute commands via SSH |
+| `POST` | `/ssh/run` | Execute commands on Linux servers |
 
-The `X-Request-Id` response header contains the TraceId for every request. Use it to find the matching log file.
+> Every response includes `X-Request-Id: <traceId>`. Use this ID to locate the matching execution log file instantly.
 
-### POST /winrm/run
+<details>
+<summary><strong>POST /winrm/run</strong> — request and response</summary>
 
 ```json
 // Request
@@ -70,7 +95,9 @@ The `X-Request-Id` response header contains the TraceId for every request. Use i
   "servers": ["SERVER01", "SERVER02"],
   "command": "Get-Service W3SVC | Select-Object Name, Status"
 }
+```
 
+```json
 // Response
 {
   "success": true,
@@ -81,13 +108,17 @@ The `X-Request-Id` response header contains the TraceId for every request. Use i
       "server": "SERVER01",
       "success": true,
       "output": "Name  Status\n----  ------\nW3SVC Running",
-      "error": ""
+      "error": "",
+      "executionTime": 2.1
     }
   ]
 }
 ```
 
-### POST /ssh/run
+</details>
+
+<details>
+<summary><strong>POST /ssh/run</strong> — request and response</summary>
 
 ```json
 // Request
@@ -96,7 +127,9 @@ The `X-Request-Id` response header contains the TraceId for every request. Use i
   "username": "admin",
   "command": "df -h"
 }
+```
 
+```json
 // Response
 {
   "success": true,
@@ -113,37 +146,39 @@ The `X-Request-Id` response header contains the TraceId for every request. Use i
 }
 ```
 
+</details>
+
 ---
 
 ## Prerequisites
 
-### WinRM (Windows targets)
+### Windows targets — WinRM
 
 Enable WinRM HTTPS on each target server:
 ```powershell
 winrm quickconfig -transport:https
 ```
 
-Add the service account to the **Remote Management Users** group on each target, then test:
+Add the account that runs PodeRemoteRunner to the **Remote Management Users** group on each target. Then verify connectivity:
 ```powershell
 Test-WSMan -ComputerName "YOUR-SERVER" -UseSSL
 ```
 
-### SSH (Linux targets)
+### Linux targets — SSH
 
-OpenSSH must be installed on the machine running PodeRemoteRunner:
+OpenSSH client must be available on the machine running PodeRemoteRunner:
 ```powershell
-Get-Command ssh.exe   # must return a path
+Get-Command ssh.exe
 # If missing:
 Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
 ```
 
-Copy your public key to each Linux host:
+Copy your public key to each target host:
 ```bash
-ssh-copy-id admin@linux-host-01
+ssh-copy-id admin@your-linux-host
 ```
 
-The key defaults to `~/.ssh/id_rsa`. Change `$SSH_KEY_PATH` at the top of `routes/ssh.ps1` to use a different key.
+> The key path defaults to `~/.ssh/id_rsa`. Set `$SSH_KEY_PATH` at the top of `routes/ssh.ps1` to use a different key.
 
 ---
 
@@ -151,54 +186,72 @@ The key defaults to `~/.ssh/id_rsa`. Change `$SSH_KEY_PATH` at the top of `route
 
 ```
 PodeRemoteRunner/
-├── server.ps1                   # Main HTTP server
-├── start-background.ps1         # Run server in background
-├── scripts/
-│   ├── setup.ps1                # Requirements check and setup
+│
+├── server.ps1                 # HTTP server entry point
+├── start-background.ps1       # Run server as a background job
+│
 ├── routes/
-│   ├── health.ps1               # GET /health
-│   ├── winrm.ps1                # GET /winrm  POST /winrm/run
-│   └── ssh.ps1                  # GET /ssh    POST /ssh/run
-└── logs/                        # Auto-generated (gitignored)
+│   ├── health.ps1             # GET  /health
+│   ├── winrm.ps1              # GET  /winrm       POST /winrm/run
+│   └── ssh.ps1                # GET  /ssh         POST /ssh/run
+│
+├── scripts/
+│   ├── setup.ps1              # Requirements check and first-run setup
+│
+└── logs/                      
     ├── server-YYYY-MM-DD.log
     ├── requests-YYYY-MM-DD.log
-    ├── winrm/                   # Per-execution WinRM logs
-    └── ssh/                     # Per-execution SSH logs
+    ├── requests-structured-YYYY-MM-DD.log
+    ├── winrm/                 # One log file per WinRM execution
+    └── ssh/                   # One log file per SSH execution
 ```
 
 ---
 
 ## Troubleshooting
 
-Find any request by its TraceId across all logs:
+**Find any request by TraceId across all logs:**
 ```powershell
 Get-ChildItem "logs\" -Recurse -Filter "*.log" | Select-String "a1b2c3d4"
 ```
 
+**WinRM**
+
+| Problem | Likely cause | Solution |
+|---------|-------------|----------|
+| Connection refused | WinRM HTTPS not enabled | `winrm quickconfig -transport:https` on target |
+| Access denied | Missing permissions | Add user to **Remote Management Users** on target |
+| SSL / certificate error | Listener misconfigured | `winrm enumerate winrm/config/listener` |
+| Timeout | Firewall blocking port 5986 | Open port 5986 on target firewall |
+
+**SSH**
+
+| Problem | Likely cause | Solution |
+|---------|-------------|----------|
+| `ssh.exe` not found | OpenSSH not installed | `Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0` |
+| Permission denied | Key not authorized on target | `ssh-copy-id user@host` from the server machine |
+| Connection timed out | Port 22 blocked or wrong host | Verify port 22 and host reachability |
+
+**General**
+
 | Problem | Solution |
 |---------|----------|
-| WinRM connection refused | Run `winrm quickconfig -transport:https` on the target |
-| WinRM access denied | Add the user to **Remote Management Users** on the target |
-| WinRM SSL error | Run `winrm enumerate winrm/config/listener` — check the certificate |
-| WinRM timeout | Verify port 5986 is open in the firewall |
-| `ssh.exe` not found | `Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0` |
-| SSH permission denied | Run `ssh-copy-id user@host` from the server machine |
-| SSH connection timed out | Verify port 22 is open and the host is reachable |
-| Port 8080 in use | Stop the existing process or change the port in `server.ps1` |
+| Port 8080 already in use | Stop the existing process or change the port in `server.ps1` |
+| Pode module not found | `Install-Module -Name Pode -Scope CurrentUser` |
 
 ---
 
 ## Security
 
-- **No passwords stored** — WinRM uses Windows integrated authentication; SSH uses private key files only
-- **Input validation** — server names and hostnames are sanitized before use
-- **Rate limiting** — 60 requests per minute per IP address
-- **OWASP headers** — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy on every response
+PodeRemoteRunner is designed to run inside a trusted network — not exposed to the public internet.
+
+- **No credentials stored** — WinRM inherits the current Windows session identity; SSH uses private key files only
+- **Input validation** — server names and hostnames are validated against strict patterns before use
+- **Rate limiting** — 60 requests per minute per IP, enforced by Pode
+- **OWASP headers** — every response includes CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Permissions-Policy
 
 ---
 
 ## License
-
 MIT — see [LICENSE](LICENSE)
-
-**Dependencies:** [Pode Framework](https://github.com/Badgerati/Pode) (MIT) · Windows Remote Management · PowerShell 5.1+
+Built on [Pode](https://github.com/Badgerati/Pode) (MIT) · Requires PowerShell 5.1+ · Windows only
