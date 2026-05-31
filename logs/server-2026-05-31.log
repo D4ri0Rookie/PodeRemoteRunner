@@ -1,0 +1,16 @@
+[2026-05-31 14:08:54] [Info] 🌐 Starting PodeRemoteScheduler...
+[2026-05-31 14:08:54] [Info] 🔧 Configuring server...
+[2026-05-31 14:08:54] [Info] ✅ HTTP endpoint added on port 8080
+[2026-05-31 14:08:54] [Info] 📂 Loading route: health.ps1
+[2026-05-31 14:08:54] [Info] ✅ Route loaded: health.ps1
+[2026-05-31 14:08:54] [Info] 📂 Loading route: ssh.ps1
+[2026-05-31 14:08:54] [Info] ✅ Route loaded: ssh.ps1
+[2026-05-31 14:08:54] [Info] 📂 Loading route: winrm.ps1
+[2026-05-31 14:08:54] [Info] ✅ Route loaded: winrm.ps1
+[2026-05-31 14:08:54] [Info] 🎯 Routes configured:
+[2026-05-31 14:08:54] [Info]    GET / - Server status page
+[2026-05-31 14:08:54] [Info]    + Routes from files in routes/ folder
+[2026-05-31 14:08:54] [Info]    All other URLs return 404
+[2026-05-31 14:08:54] [Info] 🛡️ OWASP security headers enabled
+[2026-05-31 14:08:54] [Info] 🚫 Rate limiting enabled (60 req/60s per IP via Add-PodeLimitRateRule)
+[2026-05-31 14:08:54] [Info] 🚀 PodeRemoteScheduler ready on http://localhost:8080
