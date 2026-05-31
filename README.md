@@ -2,14 +2,12 @@
 
 **Run commands on multiple remote servers in parallel — Windows and Linux.**
 
-[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
+[![PowerShell](https://img.shields.io/badge/PowerShell-7.1%2B-blue?logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
 [![Pode](https://img.shields.io/badge/Pode-2.x-brightgreen?logo=powershell&logoColor=white)](https://github.com/Badgerati/Pode)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078d4?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
 
 [Quick Start](#quick-start) · [API](#api) · [Prerequisites](#prerequisites) · [Troubleshooting](#troubleshooting)
-
-</div>
 
 ---
 
@@ -35,17 +33,20 @@ PodeRemoteRunner is a lightweight PowerShell HTTP server that executes commands 
 
 **Observability**
 - Unique TraceId per request — returned in the `X-Request-Id` response header
-- Per-execution log file — command, output, and timing saved for every run
-- Daily-rotated request logs in plain text and structured JSON (JSONL)
+- Per-execution log file (JSONL) — command, output, and timing saved for every run
+- Structured logging everywhere — JSON Lines with UTC ISO-8601 timestamps and INFO/WARN/ERROR levels, daily-rotated
 
 **Security**
+- Binds to `localhost` only by default — **no authentication layer** (read [Security](#security) before exposing it anywhere)
+- Host/server names validated against strict patterns; SSH invoked via an argument array, not a shell string
 - OWASP security headers on every response (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
-- Input validation — server names and hostnames sanitized before use
 - Rate limiting — 60 requests per minute per IP (Pode built-in)
 
 ---
 
 ## Quick Start
+
+> **Requirements:** PowerShell 7.1+ on the host machine (the SSH path uses APIs not available in Windows PowerShell 5.1), plus the Pode module.
 
 **1. Install Pode**
 ```powershell
@@ -102,7 +103,7 @@ http://localhost:8080
 {
   "success": true,
   "executionId": "a1b2c3d4",
-  "logFile": "logs/winrm/execution_2025-08-28_14-30-15_a1b2c3d4.log",
+  "logFile": "logs/winrm/execution_2025-08-28_14-30-15_a1b2c3d4.jsonl",
   "results": [
     {
       "server": "SERVER01",
@@ -190,21 +191,25 @@ PodeRemoteRunner/
 ├── server.ps1                 # HTTP server entry point
 ├── start-background.ps1       # Run server as a background job
 │
+├── lib/
+│   └── RrLogging.psm1         # Centralized structured logging (UTC ISO-8601, JSONL)
+│
 ├── routes/
 │   ├── health.ps1             # GET  /health
 │   ├── winrm.ps1              # GET  /winrm       POST /winrm/run
 │   └── ssh.ps1                # GET  /ssh         POST /ssh/run
 │
 ├── scripts/
-│   ├── setup.ps1              # Requirements check and first-run setup
+│   └── setup.ps1              # Requirements check and first-run setup
 │
-└── logs/                      
-    ├── server-YYYY-MM-DD.log
-    ├── requests-YYYY-MM-DD.log
-    ├── requests-structured-YYYY-MM-DD.log
-    ├── winrm/                 # One log file per WinRM execution
-    └── ssh/                   # One log file per SSH execution
+└── logs/
+    ├── server-YYYY-MM-DD.jsonl       # Server lifecycle
+    ├── requests-YYYY-MM-DD.jsonl     # One structured line per HTTP request
+    ├── winrm/                        # One JSONL file per WinRM execution
+    └── ssh/                          # One JSONL file per SSH execution
 ```
+
+All log files are JSON Lines (one JSON object per line) with UTC ISO-8601 timestamps and `INFO`/`WARN`/`ERROR` levels — parse them with `Get-Content file.jsonl | ConvertFrom-Json`.
 
 ---
 
@@ -212,7 +217,7 @@ PodeRemoteRunner/
 
 **Find any request by TraceId across all logs:**
 ```powershell
-Get-ChildItem "logs\" -Recurse -Filter "*.log" | Select-String "a1b2c3d4"
+Get-ChildItem "logs\" -Recurse -Filter "*.jsonl" | Select-String "a1b2c3d4"
 ```
 
 **WinRM**
@@ -243,15 +248,19 @@ Get-ChildItem "logs\" -Recurse -Filter "*.log" | Select-String "a1b2c3d4"
 
 ## Security
 
-PodeRemoteRunner is designed to run inside a trusted network — not exposed to the public internet.
+> **PodeRemoteRunner has no authentication.** Anyone who can reach the listening port can run arbitrary commands on every reachable target, using the server's Windows identity (WinRM) and SSH key (SSH). It binds to `localhost` only by design — **do not change the bind address or expose it to a network without first putting authentication and HTTPS in front of it.** Access to the API is equivalent to administrative access to every target.
 
+- **Arbitrary execution is the feature** — the `command` field runs as-is on the targets. Input validation covers host/server names, not the command itself
 - **No credentials stored** — WinRM inherits the current Windows session identity; SSH uses private key files only
-- **Input validation** — server names and hostnames are validated against strict patterns before use
+- **SSH hardening** — invoked through an argument array (not a shell string), key-based auth only, `BatchMode=yes`
 - **Rate limiting** — 60 requests per minute per IP, enforced by Pode
 - **OWASP headers** — every response includes CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Permissions-Policy
+- **Logs may contain sensitive data** — command text and full command output are written to disk in clear text under `logs/`. Restrict access to that directory and define a retention policy
+
+WinRM connections use `-SkipCACheck -SkipCNCheck`, which disables certificate validation — convenient with self-signed certificates, but vulnerable to man-in-the-middle within the network. Use a trusted certificate where that matters.
 
 ---
 
 ## License
 MIT — see [LICENSE](LICENSE)
-Built on [Pode](https://github.com/Badgerati/Pode) (MIT) · Requires PowerShell 5.1+ · Windows only
+Built on [Pode](https://github.com/Badgerati/Pode) (MIT) · Requires PowerShell 7.1+ · Host runs on Windows
