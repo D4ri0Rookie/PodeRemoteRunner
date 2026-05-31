@@ -155,7 +155,6 @@ PodeRemoteRunner/
 ├── start-background.ps1         # Run server in background
 ├── scripts/
 │   ├── setup.ps1                # Requirements check and setup
-│   └── generate-image.ps1       # Regenerate image.png
 ├── routes/
 │   ├── health.ps1               # GET /health
 │   ├── winrm.ps1                # GET /winrm  POST /winrm/run
