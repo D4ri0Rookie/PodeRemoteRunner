@@ -19,8 +19,9 @@ Write-Host "📋 Checking PowerShell version..." -ForegroundColor Yellow
 $psVersion = $PSVersionTable.PSVersion
 Write-Host "   PowerShell version: $psVersion" -ForegroundColor Green
 
-if ($psVersion.Major -lt 5) {
-    Write-Host "❌ PowerShell 5.1 or higher is required" -ForegroundColor Red
+if ($psVersion -lt [version]'7.1') {
+    Write-Host "❌ PowerShell 7.1 or higher is required (current: $psVersion)" -ForegroundColor Red
+    Write-Host "💡 Install it from https://github.com/PowerShell/PowerShell/releases" -ForegroundColor Yellow
     exit 1
 }
 
@@ -77,7 +78,7 @@ Write-Host "Server Type: HTTP (WinRM + SSH remote executor)" -ForegroundColor Wh
 Write-Host "Default Port: 8080" -ForegroundColor White
 Write-Host "Protocol: HTTP" -ForegroundColor White
 Write-Host "Authentication: Windows integrated (WinRM) / SSH key (Linux)" -ForegroundColor White
-Write-Host "Logging: Daily rotation in logs/ directory" -ForegroundColor White
+Write-Host "Logging: Structured JSONL (UTC ISO-8601), daily rotation in logs/ directory" -ForegroundColor White
 Write-Host ""
 
 Write-Host "✅ Setup completed successfully!" -ForegroundColor Green
